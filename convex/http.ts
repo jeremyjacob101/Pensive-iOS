@@ -11,7 +11,14 @@ http.route({
   path: "/api/auth/session",
   method: "GET",
   handler: httpAction(async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
+    let identity = null;
+    try {
+      identity = await ctx.auth.getUserIdentity();
+    } catch {
+      // Invalid/stale bearer tokens should not break app bootstrap.
+      // Return unauthenticated so client can show login and recover.
+      identity = null;
+    }
     const data = identity
       ? { authenticated: true, userId: identity.subject }
       : { authenticated: false };
