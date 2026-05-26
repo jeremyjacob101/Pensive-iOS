@@ -8,13 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		0C0A9CD9A2B5176DE940EC51 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F8155C7EF63E9520D985E5 /* SessionStore.swift */; };
-		2300FE4D7FA1D52E63F731CF /* LedgerPart6Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026DBFDB39CD5DB5319001FB /* LedgerPart6Tests.swift */; };
 		2880EF2873615DD899935E23 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FC40024A84513ECC515CEC /* RootView.swift */; };
 		32598E2BA3485EBB94C22AC5 /* AuthTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9BB32F187EA1C144E85C794 /* AuthTokenStore.swift */; };
+		33337397C5FD86C2E8F7E49C /* RecurringsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3689D1DBEC19C2DE8E333818 /* RecurringsView.swift */; };
 		339F14E959BC67DD3B2A7286 /* PensiveUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6331E3C7A197ED85CEC7198 /* PensiveUITestsLaunchTests.swift */; };
 		3878FF85A81FB0C58414CACD /* LedgerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726D060B5033637BD6C1931C /* LedgerModels.swift */; };
 		570A5E82945D7E0FD6CFC91C /* PensiveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1060E8EA814D7616BF2AC146 /* PensiveApp.swift */; };
 		59D16D9BC91F9057E4695658 /* LedgerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D911F3785CF260C05649961 /* LedgerViews.swift */; };
+		72D4BB0592C9D602D7AC1C4B /* RecurringsFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9D0A2E816730A432528113 /* RecurringsFeature.swift */; };
 		88693FA8B0F3F36995A0BEF2 /* LedgerFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C02665BC4DC026C40EDE06E /* LedgerFeature.swift */; };
 		9492B5AF340E0C7762D91E7B /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FCE0385815003415646F8C4 /* AuthState.swift */; };
 		9667DDD6196C57FF99F9CB42 /* ConvexAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CEAE2AA2253F8FA91C7EEB3 /* ConvexAPI.swift */; };
@@ -48,13 +49,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		026DBFDB39CD5DB5319001FB /* LedgerPart6Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerPart6Tests.swift; sourceTree = "<group>"; };
 		0FCE0385815003415646F8C4 /* AuthState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift; sourceTree = "<group>"; };
 		1060E8EA814D7616BF2AC146 /* PensiveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PensiveApp.swift; sourceTree = "<group>"; };
 		12C8A5DC05FE932702BEE04F /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		14B0A5238291F25F063E45FD /* Pensive.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pensive.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		27991D4F555E429982C9C524 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		2C02665BC4DC026C40EDE06E /* LedgerFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LedgerFeature.swift; sourceTree = "<group>"; };
+		3689D1DBEC19C2DE8E333818 /* RecurringsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringsView.swift; sourceTree = "<group>"; };
 		37FC40024A84513ECC515CEC /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		3F7EF56A041587E1F34F2EC0 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		4079923627B6EFA6F2BE16E7 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
@@ -73,6 +74,7 @@
 		D6331E3C7A197ED85CEC7198 /* PensiveUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PensiveUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		D8DCC4A5D09BD130AF383AA2 /* ConvexTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexTransport.swift; sourceTree = "<group>"; };
 		D98F13E54929428601D27C98 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DC9D0A2E816730A432528113 /* RecurringsFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringsFeature.swift; sourceTree = "<group>"; };
 		E6F8155C7EF63E9520D985E5 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		E9BB32F187EA1C144E85C794 /* AuthTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTokenStore.swift; sourceTree = "<group>"; };
 		F3DDE09513C53DC99DA6A62B /* PensiveUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PensiveUITests.swift; sourceTree = "<group>"; };
@@ -231,17 +233,8 @@
 		9CA9B78435C5A244F95A76D4 /* PensiveTests */ = {
 			isa = PBXGroup;
 			children = (
-				A93B999307A06528D8A6B77D /* Ledger */,
 			);
 			path = PensiveTests;
-			sourceTree = "<group>";
-		};
-		A93B999307A06528D8A6B77D /* Ledger */ = {
-			isa = PBXGroup;
-			children = (
-				026DBFDB39CD5DB5319001FB /* LedgerPart6Tests.swift */,
-			);
-			path = Ledger;
 			sourceTree = "<group>";
 		};
 		B47FC0530584C45A5C991800 /* Infrastructure */ = {
@@ -259,6 +252,7 @@
 			children = (
 				48693613505F00F7FEBFEEE7 /* Auth */,
 				DCF720E836A0C8BC588DB44E /* Ledger */,
+				F3715626E52514AAE4DAFAE6 /* Recurrings */,
 				1C1FFB6B1DD8686D7A8281C1 /* Shell */,
 			);
 			path = Presentation;
@@ -271,6 +265,15 @@
 				6D911F3785CF260C05649961 /* LedgerViews.swift */,
 			);
 			path = Ledger;
+			sourceTree = "<group>";
+		};
+		F3715626E52514AAE4DAFAE6 /* Recurrings */ = {
+			isa = PBXGroup;
+			children = (
+				DC9D0A2E816730A432528113 /* RecurringsFeature.swift */,
+				3689D1DBEC19C2DE8E333818 /* RecurringsView.swift */,
+			);
+			path = Recurrings;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -400,6 +403,8 @@
 				3878FF85A81FB0C58414CACD /* LedgerModels.swift in Sources */,
 				59D16D9BC91F9057E4695658 /* LedgerViews.swift in Sources */,
 				570A5E82945D7E0FD6CFC91C /* PensiveApp.swift in Sources */,
+				72D4BB0592C9D602D7AC1C4B /* RecurringsFeature.swift in Sources */,
+				33337397C5FD86C2E8F7E49C /* RecurringsView.swift in Sources */,
 				2880EF2873615DD899935E23 /* RootView.swift in Sources */,
 				0C0A9CD9A2B5176DE940EC51 /* SessionStore.swift in Sources */,
 				A96D52A297C484431CF9AC65 /* SharedControls.swift in Sources */,
@@ -410,7 +415,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2300FE4D7FA1D52E63F731CF /* LedgerPart6Tests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

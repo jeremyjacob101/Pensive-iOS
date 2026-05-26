@@ -73,6 +73,8 @@ private struct FeatureRootView: View {
                 ExpensesFeatureView(api: api)
             } else if tab == .incomings {
                 IncomingsFeatureView(api: api)
+            } else if tab == .recurrings {
+                RecurringsFeatureView(api: api)
             } else {
                 List {
             Section {

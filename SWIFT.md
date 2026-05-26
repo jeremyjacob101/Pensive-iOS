@@ -119,6 +119,9 @@ xcodebuild -scheme Pensive -destination 'platform=iOS Simulator,name=iPhone 17' 
 Notes:
 - For simulator stability and reproducibility, follow `SIMULATOR.md` exactly for every iOS build/test run.
 - Prefer `./scripts/test-ios-stable.sh` to avoid repeated simulator/deployment drift issues.
+- If you add new Swift files, ensure they are included in the Xcode project sources before building/tests:
+  - either regenerate project files (`xcodegen generate`) when using `project.yml`, or
+  - manually confirm entries exist in `Pensive.xcodeproj/project.pbxproj`.
 - Run the `SIMULATOR.md` proactive preflight sequence (`shutdown/erase/boot/bootstatus`) before each test session.
 - `.xcconfig` URL rule: do not set raw `https://...` directly (the `//` is treated as a comment). Use `$(URL_SCHEME_HTTPS)$(URL_SLASH)$(URL_SLASH)...`.
 - In Codex environments, if CoreSimulator/Xcode connection errors appear, rerun the same command with escalated permissions before changing flags.

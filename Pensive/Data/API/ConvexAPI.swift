@@ -55,7 +55,25 @@ struct UnlinkResponse: Decodable { let unlinked: Int; let remainingLinked: Int }
 struct LinkResponse: Decodable { let linked: Int; let baseExpenseId: String?; let baseIncomingId: String?; let baseExpenseLabel: String? }
 struct BulkPatchResultResponse: Decodable { let updatedCount: Int }
 
-struct PaginationOpts: Codable { let cursor: String?; let numItems: Int }
+struct PaginationOpts: Codable {
+    let cursor: String?
+    let numItems: Int
+
+    enum CodingKeys: String, CodingKey {
+        case cursor
+        case numItems
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let cursor {
+            try container.encode(cursor, forKey: .cursor)
+        } else {
+            try container.encodeNil(forKey: .cursor)
+        }
+        try container.encode(numItems, forKey: .numItems)
+    }
+}
 struct PaginationRequest: Codable { let paginationOpts: PaginationOpts }
 struct PaginatedResponse<T: Decodable>: Decodable { let page: [T]; let isDone: Bool; let continueCursor: String? }
 
