@@ -56,6 +56,7 @@ final class QuickAddFormViewModel: ObservableObject {
 private struct FeatureRootView: View {
     let tab: AppTab
     let userId: String
+    let api: ConvexAPI
     let onSignOut: () -> Void
     let onQuickAdd: () -> Void
 
@@ -67,7 +68,13 @@ private struct FeatureRootView: View {
     @State private var rangeEnd = Date()
 
     var body: some View {
-        List {
+        Group {
+            if tab == .expenses {
+                ExpensesFeatureView(api: api)
+            } else if tab == .incomings {
+                IncomingsFeatureView(api: api)
+            } else {
+                List {
             Section {
                 DebouncedSearchField(text: $searchText) { value in
                     debouncedSearch = value
@@ -102,9 +109,9 @@ private struct FeatureRootView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle(tab.title)
-        .navigationDestination(for: ShellRoute.self) { route in
+                .listStyle(.insetGrouped)
+                .navigationTitle(tab.title)
+                .navigationDestination(for: ShellRoute.self) { route in
             switch route {
             case .detail(let title):
                 LoadStateView(state: .content) {
@@ -114,8 +121,8 @@ private struct FeatureRootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
-        }
-        .toolbar {
+                }
+                .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     onQuickAdd()
@@ -125,12 +132,15 @@ private struct FeatureRootView: View {
                 .accessibilityIdentifier("quick_add_button")
                 .accessibilityLabel("Quick Add")
             }
+                }
+            }
         }
     }
 }
 
 struct AppShellView: View {
     let userId: String
+    let api: ConvexAPI
     let onSignOut: () -> Void
 
     @SceneStorage("shell.selectedTab") private var selectedTabRaw = AppTab.defaultTab.rawValue
@@ -151,7 +161,7 @@ struct AppShellView: View {
         TabView(selection: $selectedTab) {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 NavigationStack(path: binding(for: tab)) {
-                    FeatureRootView(tab: tab, userId: userId, onSignOut: onSignOut) {
+                    FeatureRootView(tab: tab, userId: userId, api: api, onSignOut: onSignOut) {
                         quickAddPresented = true
                     }
                 }

@@ -177,7 +177,7 @@ struct DateScopeRequest: Codable {
 
 struct ExpenseDTO: Codable {
     let _id: String
-    let _creationTime: Int?
+    let _creationTime: Double?
     let expense: String
     let type: String?
     let account: String?
@@ -199,7 +199,7 @@ struct ExpenseDTO: Codable {
 
 struct IncomingDTO: Codable {
     let _id: String
-    let _creationTime: Int?
+    let _creationTime: Double?
     let incoming: String
     let paidBy: String?
     let incomeType: String?
@@ -311,7 +311,7 @@ struct UnlinkIncomingRequest: Codable { let incomingId: String }
 
 struct RecurringDTO: Codable {
     let _id: String
-    let _creationTime: Int?
+    let _creationTime: Double?
     let status: String
     let kind: String?
     let name: String
@@ -381,7 +381,7 @@ struct SummaryBucket: Codable { let month: String; let rawExpenses: Double; let 
 struct TrackingResponse: Codable { let currentMonth: String; let rows: [TrackingRow] }
 struct TrackingRow: Codable { let key: String; let source: String; let kind: String; let value: String; let parentValue: String?; let color: String; let label: String; let paidMonths: [String]; let rangeMonths: [String]; let statusByMonth: [String: String] }
 
-struct NotepadWorkspaceDTO: Codable { let _id: String?; let _creationTime: Int?; let userId: String?; let notes: [NotepadNote]; let tables: [NotepadTable]; let updatedAt: Int }
+struct NotepadWorkspaceDTO: Codable { let _id: String?; let _creationTime: Double?; let userId: String?; let notes: [NotepadNote]; let tables: [NotepadTable]; let updatedAt: Double }
 struct NotepadNote: Codable { let id: String; let title: String; let content: String }
 struct NotepadTable: Codable { let id: String; let title: String; let cells: [[String]] }
 
@@ -427,8 +427,8 @@ struct PaybackExpenseLinkDTO: Codable {
     let incomingId: String
     let allocatedAmount: Double
     let notes: String?
-    let createdAt: Int
-    let updatedAt: Int
+    let createdAt: Double
+    let updatedAt: Double
     let incoming: IncomingDTO
 }
 
@@ -438,8 +438,8 @@ struct PaybackIncomingLinkDTO: Codable {
     let incomingId: String
     let allocatedAmount: Double
     let notes: String?
-    let createdAt: Int
-    let updatedAt: Int
+    let createdAt: Double
+    let updatedAt: Double
     let expense: ExpenseDTO
 }
 

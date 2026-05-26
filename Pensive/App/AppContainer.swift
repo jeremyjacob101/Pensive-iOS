@@ -3,6 +3,7 @@ import Foundation
 struct AppContainer {
     let environment: AppEnvironment
     let sessionStore: SessionStoring
+    let api: ConvexAPI
 
     static func bootstrap(bundle: Bundle = .main) -> AppContainer {
         let env = AppEnvironment.load(from: bundle)
@@ -10,11 +11,13 @@ struct AppContainer {
         print("AppEnvironment[\(env.appEnvName)] base=\(env.convexBaseURL) http=\(env.convexHTTPActionBaseURL)")
         #endif
         if let userId = ProcessInfo.processInfo.environment["UI_TEST_AUTHENTICATED_USER_ID"], !userId.isEmpty {
-            return AppContainer(environment: env, sessionStore: UITestSessionStore(userId: userId))
+            let tokenStore = AuthTokenStore()
+            let api = AppContainer.makeAPI(environment: env, tokenStore: tokenStore)
+            return AppContainer(environment: env, sessionStore: UITestSessionStore(userId: userId), api: api)
         }
         let tokenStore = AuthTokenStore()
         let api = AppContainer.makeAPI(environment: env, tokenStore: tokenStore)
-        return AppContainer(environment: env, sessionStore: SessionStore(authAPI: api.auth, tokenStore: tokenStore))
+        return AppContainer(environment: env, sessionStore: SessionStore(authAPI: api.auth, tokenStore: tokenStore), api: api)
     }
 
     private static func makeAPI(environment: AppEnvironment, tokenStore: AuthTokenStoring) -> ConvexAPI {

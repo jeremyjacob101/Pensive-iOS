@@ -2,8 +2,10 @@ import SwiftUI
 
 struct RootView: View {
     @StateObject private var authViewModel: AuthViewModel
+    private let container: AppContainer
 
     init(container: AppContainer) {
+        self.container = container
         _authViewModel = StateObject(wrappedValue: AuthViewModel(sessionStore: container.sessionStore))
     }
 
@@ -19,7 +21,7 @@ struct RootView: View {
                     .accessibilityIdentifier("login_view")
 
             case .authenticated(let session):
-                AppShellView(userId: session.userId, onSignOut: authViewModel.signOut)
+                AppShellView(userId: session.userId, api: container.api, onSignOut: authViewModel.signOut)
                     .accessibilityIdentifier("home_view")
 
             case .authError(let error):
