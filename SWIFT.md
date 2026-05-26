@@ -98,6 +98,7 @@ xcodebuild -scheme Pensive -destination 'platform=iOS Simulator,name=iPhone 17' 
 ```
 
 Notes:
+- For simulator stability and reproducibility, follow `SIMULATOR.md` exactly for every iOS build/test run.
 - If the scheme/device name differs, update commands accordingly.
 - If the project uses an `.xcworkspace`, use `-workspace` plus `-scheme`.
 - Keep build/test commands reproducible for CI.
@@ -285,6 +286,7 @@ Define standards for:
 - No unresolved “TBD” on high-impact flows.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Manual review checklist on parity matrix completeness.
 
 ## Failure Modes
@@ -363,6 +365,7 @@ Create:
 - Env missing -> descriptive debug failure.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Unit test: config parser reads each expected key.
 - Smoke UI test: app launch + root view visible.
 - Execute these tests with concrete simulator destination and sequential order:
@@ -523,6 +526,7 @@ Defaults:
 - Wrapper implementation is traceable endpoint-by-endpoint to `API_CONTRACT.md`.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Contract completeness test:
   - Cross-check `API_CONTRACT.md` endpoint index against exported Convex capabilities used by iOS.
 - Mapper tests:
@@ -596,6 +600,7 @@ On launch:
 - Session persistence works across relaunch.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - State machine transition tests.
 - Integration tests for launch -> auth routing.
 
@@ -665,6 +670,7 @@ Default to system light/dark; no custom theme toggle required for parity v1.
 - Shell handles deep links and state restoration baseline.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - UI tests for tab switching + quick-add sheet launch.
 
 ## Failure Modes
@@ -743,6 +749,7 @@ Incomings:
 - Search + filters + date scope interplay is correct.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Unit tests for filtering and scope match state.
 - Integration tests for CRUD + partner operations.
 - Snapshot/UI tests for expanded/editing states.
@@ -832,6 +839,7 @@ Kind cleanup rule (must mirror backend behavior):
 - Recurring behaviors and fields match backend expectations.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Validation tests by recurring kind.
 - Status toggle and materialization integration tests.
 
@@ -894,6 +902,7 @@ Use Swift Charts for:
 - Filter and scope changes update visuals correctly.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Unit tests for aggregate computations in mappers/view models.
 - Snapshot tests across key filter states.
 
@@ -955,6 +964,7 @@ Storage keys should map to iOS equivalents; migration from old local storage not
 - Persisted settings restore correctly after app relaunch.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Unit tests for month range generation and segment status logic.
 - UI tests for state persistence and row interaction.
 
@@ -1016,6 +1026,7 @@ Recreate notepad hybrid workspace (notes + editable tables) with autosave.
 - Typical notes/tables workflows are smooth and reliable.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Unit tests for table normalization and local edit reducers.
 - Integration tests for debounced save semantics.
 
@@ -1081,6 +1092,7 @@ Use explicit actions:
 - All option transformations execute successfully via backend contracts.
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Unit tests for move/promotion request builders.
 - Integration tests for mutation flows and UI refresh propagation.
 
@@ -1155,6 +1167,7 @@ Create runbook:
 - Build is testflight-ready with documented known issues (if any).
 
 ## Tests
+- Simulator execution: follow `SIMULATOR.md` exactly for destination, derived data path, sequential runs, and recovery steps.
 - Full regression suite pass.
 
 ## Failure Modes

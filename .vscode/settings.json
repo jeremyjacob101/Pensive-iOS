@@ -1,0 +1,19 @@
+{
+  "sweetpad.xcode.workspacePath": "Pensive.xcodeproj/project.xcworkspace",
+  "sweetpad.xcode.projectPath": "Pensive.xcodeproj",
+  "sweetpad.xcode.scheme": "Pensive",
+  "sweetpad.xcode.configuration": "Debug",
+  "sweetpad.xcode.destination": "platform=iOS Simulator,name=iPhone 17",
+  "sweetpad.build.arguments": [
+    "CODE_SIGNING_ALLOWED=NO",
+    "CODE_SIGNING_REQUIRED=NO",
+    "-derivedDataPath",
+    "/private/tmp/PensiveDerivedData"
+  ],
+  "sweetpad.test.arguments": [
+    "CODE_SIGNING_ALLOWED=NO",
+    "CODE_SIGNING_REQUIRED=NO",
+    "-derivedDataPath",
+    "/private/tmp/PensiveDerivedData"
+  ]
+}
