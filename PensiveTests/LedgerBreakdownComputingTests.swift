@@ -117,4 +117,30 @@ final class LedgerBreakdownComputingTests: XCTestCase {
         XCTAssertEqual(store.startMonth(source: "expense", key: "housing"), "2026-02")
         XCTAssertEqual(store.trailingBufferMonths(source: "expense", key: "housing"), 3)
     }
+
+    func testNotepadNormalizationPadsRaggedRowsAndDefaultsNames() {
+        let dto = NotepadWorkspaceDTO(
+            _id: nil,
+            _creationTime: nil,
+            userId: nil,
+            notes: [.init(id: "n1", title: "", content: "A")],
+            tables: [.init(id: "t1", title: "", cells: [["x"], ["y", "z"]])],
+            updatedAt: 0
+        )
+
+        let normalized = NotepadWorkspaceNormalization.normalize(dto)
+        XCTAssertEqual(normalized.notes.first?.title, "Untitled Note")
+        XCTAssertEqual(normalized.tables.first?.title, "Untitled Table")
+        XCTAssertEqual(normalized.tables.first?.cells.count, 2)
+        XCTAssertEqual(normalized.tables.first?.cells[0].count, 2)
+        XCTAssertEqual(normalized.tables.first?.cells[0][1], "")
+    }
+
+    func testNotepadSetCellEditsExpectedCellOnly() {
+        let start = [["A", "B"], ["C", "D"]]
+        let changed = NotepadWorkspaceNormalization.setCell(cells: start, row: 1, col: 0, value: "X")
+        XCTAssertEqual(changed[0][0], "A")
+        XCTAssertEqual(changed[1][0], "X")
+        XCTAssertEqual(changed[1][1], "D")
+    }
 }

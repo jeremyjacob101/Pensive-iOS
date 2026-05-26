@@ -1,5 +1,377 @@
 import SwiftUI
 
+struct NotepadNoteViewData: Identifiable {
+    let id: String
+    var title: String
+    var content: String
+}
+
+struct NotepadTableViewData: Identifiable {
+    let id: String
+    var title: String
+    var cells: [[String]]
+}
+
+struct NotepadWorkspaceViewData {
+    var notes: [NotepadNoteViewData]
+    var tables: [NotepadTableViewData]
+}
+
+enum NotepadWorkspaceNormalization {
+    static func normalize(_ dto: NotepadWorkspaceDTO) -> NotepadWorkspaceViewData {
+        let notes = dto.notes.map { note in
+            NotepadNoteViewData(
+                id: note.id.isEmpty ? UUID().uuidString : note.id,
+                title: note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Note" : note.title,
+                content: note.content
+            )
+        }
+
+        let tables = dto.tables.map { table in
+            let normalizedCells = normalizeCells(table.cells)
+            return NotepadTableViewData(
+                id: table.id.isEmpty ? UUID().uuidString : table.id,
+                title: table.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Table" : table.title,
+                cells: normalizedCells
+            )
+        }
+
+        return .init(notes: notes, tables: tables)
+    }
+
+    static func normalizeCells(_ cells: [[String]]) -> [[String]] {
+        if cells.isEmpty {
+            return [[""]]
+        }
+        let width = max(1, cells.map(\.count).max() ?? 1)
+        return cells.map { row in
+            if row.count == width { return row }
+            return row + Array(repeating: "", count: width - row.count)
+        }
+    }
+
+    static func setCell(cells: [[String]], row: Int, col: Int, value: String) -> [[String]] {
+        var next = normalizeCells(cells)
+        guard row >= 0, col >= 0, row < next.count, col < next[row].count else { return next }
+        next[row][col] = value
+        return next
+    }
+}
+
+@MainActor
+private final class NotepadFeatureViewModel: ObservableObject {
+    @Published private(set) var state: ViewLoadState = .loading
+    @Published private(set) var notes: [NotepadNoteViewData] = []
+    @Published private(set) var tables: [NotepadTableViewData] = []
+    @Published var saveErrorText: String?
+
+    private let api: ConvexAPI
+    private var saveTasks: [String: Task<Void, Never>] = [:]
+
+    init(api: ConvexAPI) {
+        self.api = api
+    }
+
+    func onAppear() {
+        if notes.isEmpty && tables.isEmpty {
+            Task { await refresh() }
+        }
+    }
+
+    func refresh() async {
+        state = .loading
+        do {
+            let workspace = try await api.notepad.getMine()
+            apply(workspace: workspace)
+            state = .content
+        } catch {
+            if let workspace = debugFixtureWorkspaceIfEnabled() {
+                apply(workspace: workspace)
+                state = .content
+            } else {
+                state = .error(message: "Failed to load notepad")
+            }
+        }
+    }
+
+    func addNote() {
+        Task {
+            do {
+                try await api.notepad.addNote(.init(noteId: nil, title: "Untitled Note"))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to add note."
+            }
+        }
+    }
+
+    func addTable() {
+        Task {
+            do {
+                try await api.notepad.addTable()
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to add table."
+            }
+        }
+    }
+
+    func cleanupEmptyNotes() {
+        Task {
+            do {
+                try await api.notepad.cleanupEmptyNotes()
+                await refresh()
+            } catch {
+                saveErrorText = "Cleanup failed."
+            }
+        }
+    }
+
+    func renameNote(id: String, title: String) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].title = title
+        debounceSave(key: "note-title-\(id)") { [api] in
+            try await api.notepad.renameNote(.init(noteId: id, title: title))
+        }
+    }
+
+    func saveNoteContent(id: String, content: String) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].content = content
+        debounceSave(key: "note-content-\(id)") { [api] in
+            try await api.notepad.saveNoteContent(.init(noteId: id, content: content))
+        }
+    }
+
+    func renameTable(id: String, title: String) {
+        guard let index = tables.firstIndex(where: { $0.id == id }) else { return }
+        tables[index].title = title
+        debounceSave(key: "table-title-\(id)") { [api] in
+            try await api.notepad.renameTable(.init(tableId: id, title: title))
+        }
+    }
+
+    func deleteTable(id: String) {
+        Task {
+            do {
+                try await api.notepad.deleteTable(.init(tableId: id))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to delete table."
+            }
+        }
+    }
+
+    func editCell(tableID: String, row: Int, col: Int, value: String) {
+        guard let index = tables.firstIndex(where: { $0.id == tableID }) else { return }
+        tables[index].cells = NotepadWorkspaceNormalization.setCell(cells: tables[index].cells, row: row, col: col, value: value)
+        debounceSave(key: "cell-\(tableID)-\(row)-\(col)") { [api] in
+            try await api.notepad.saveCell(.init(tableId: tableID, rowIndex: row, colIndex: col, value: value))
+        }
+    }
+
+    func addRow(tableID: String) {
+        Task {
+            do {
+                try await api.notepad.addRow(.init(tableId: tableID))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to add row."
+            }
+        }
+    }
+
+    func addColumn(tableID: String) {
+        Task {
+            do {
+                try await api.notepad.addColumn(.init(tableId: tableID))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to add column."
+            }
+        }
+    }
+
+    func removeLastRow(tableID: String) {
+        Task {
+            do {
+                try await api.notepad.removeLastRow(.init(tableId: tableID))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to remove row."
+            }
+        }
+    }
+
+    func removeLastColumn(tableID: String) {
+        Task {
+            do {
+                try await api.notepad.removeLastColumn(.init(tableId: tableID))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to remove column."
+            }
+        }
+    }
+
+    private func apply(workspace: NotepadWorkspaceDTO) {
+        let normalized = NotepadWorkspaceNormalization.normalize(workspace)
+        notes = normalized.notes
+        tables = normalized.tables
+    }
+
+    private func debounceSave(key: String, delayNs: UInt64 = 400_000_000, _ operation: @escaping @Sendable () async throws -> Void) {
+        saveTasks[key]?.cancel()
+        saveTasks[key] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delayNs)
+            guard !Task.isCancelled else { return }
+            do {
+                try await operation()
+                await MainActor.run { self?.saveErrorText = nil }
+            } catch {
+                await MainActor.run { self?.saveErrorText = "Autosave failed. It will retry on your next edit." }
+            }
+        }
+    }
+
+    private func debugFixtureWorkspaceIfEnabled() -> NotepadWorkspaceDTO? {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["UI_TEST_NOTEPAD_FIXTURE"] == "1" else { return nil }
+        return Self.fixtureWorkspace()
+        #else
+        return nil
+        #endif
+    }
+
+    #if DEBUG
+    private static func fixtureWorkspace() -> NotepadWorkspaceDTO {
+        .init(
+            _id: nil,
+            _creationTime: nil,
+            userId: "ui-test",
+            notes: [.init(id: "note-1", title: "Today", content: "Initial note content")],
+            tables: [.init(id: "table-1", title: "Budget", cells: [["Category", "Amount"], ["Rent", "6000"]])],
+            updatedAt: 0
+        )
+    }
+    #endif
+}
+
+private struct NotepadFeatureView: View {
+    enum Panel: String, CaseIterable {
+        case notes = "Notes"
+        case tables = "Tables"
+    }
+
+    @StateObject private var viewModel: NotepadFeatureViewModel
+    @State private var panel: Panel = .notes
+
+    init(api: ConvexAPI) {
+        _viewModel = StateObject(wrappedValue: NotepadFeatureViewModel(api: api))
+    }
+
+    var body: some View {
+        LoadStateView(state: viewModel.state, retry: { Task { await viewModel.refresh() } }) {
+            List {
+                Section {
+                    Picker("Panel", selection: $panel) {
+                        ForEach(Panel.allCases, id: \.self) { p in
+                            Text(p.rawValue).tag(p)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if let saveError = viewModel.saveErrorText {
+                    Section {
+                        Text(saveError)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                if panel == .notes {
+                    Section {
+                        Button("Add Note") { viewModel.addNote() }
+                            .accessibilityIdentifier("notepad_add_note")
+                        Button("Cleanup Empty Notes") { viewModel.cleanupEmptyNotes() }
+                            .accessibilityIdentifier("notepad_cleanup_notes")
+                    }
+
+                    ForEach(viewModel.notes) { note in
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Title", text: Binding(
+                                get: { note.title },
+                                set: { viewModel.renameNote(id: note.id, title: $0) }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("notepad_note_title_\(note.id)")
+
+                            TextEditor(text: Binding(
+                                get: { note.content },
+                                set: { viewModel.saveNoteContent(id: note.id, content: $0) }
+                            ))
+                            .frame(minHeight: 120)
+                            .accessibilityIdentifier("notepad_note_content_\(note.id)")
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } else {
+                    Section {
+                        Button("Add Table") { viewModel.addTable() }
+                            .accessibilityIdentifier("notepad_add_table")
+                    }
+
+                    ForEach(viewModel.tables) { table in
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Table Title", text: Binding(
+                                get: { table.title },
+                                set: { viewModel.renameTable(id: table.id, title: $0) }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("notepad_table_title_\(table.id)")
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(Array(table.cells.enumerated()), id: \.offset) { rowIndex, row in
+                                        HStack(spacing: 6) {
+                                            ForEach(Array(row.enumerated()), id: \.offset) { colIndex, cell in
+                                                TextField("Cell", text: Binding(
+                                                    get: { cell },
+                                                    set: { viewModel.editCell(tableID: table.id, row: rowIndex, col: colIndex, value: $0) }
+                                                ))
+                                                .textFieldStyle(.roundedBorder)
+                                                .frame(width: 130)
+                                                .accessibilityIdentifier("notepad_cell_\(table.id)_\(rowIndex)_\(colIndex)")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            HStack {
+                                Button("Row +") { viewModel.addRow(tableID: table.id) }
+                                Button("Row -") { viewModel.removeLastRow(tableID: table.id) }
+                                Button("Col +") { viewModel.addColumn(tableID: table.id) }
+                                Button("Col -") { viewModel.removeLastColumn(tableID: table.id) }
+                                Spacer()
+                                Button("Delete", role: .destructive) { viewModel.deleteTable(id: table.id) }
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("notepad_table_actions_\(table.id)")
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Notepad")
+            .refreshable { await viewModel.refresh() }
+        }
+        .task { viewModel.onAppear() }
+    }
+}
+
 enum TrackingTimelineSegmentState: String {
     case paid
     case unpaid
@@ -139,8 +511,8 @@ private final class TrackingFeatureViewModel: ObservableObject {
             apply(response: tracking)
             state = .content
         } catch {
-            if ProcessInfo.processInfo.environment["UI_TEST_TRACKING_FIXTURE"] == "1" {
-                apply(response: Self.fixtureResponse())
+            if let tracking = debugFixtureResponseIfEnabled() {
+                apply(response: tracking)
                 state = .content
             } else {
                 state = .error(message: "Failed to load tracking")
@@ -226,6 +598,16 @@ private final class TrackingFeatureViewModel: ObservableObject {
         }
     }
 
+    private func debugFixtureResponseIfEnabled() -> TrackingResponse? {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["UI_TEST_TRACKING_FIXTURE"] == "1" else { return nil }
+        return Self.fixtureResponse()
+        #else
+        return nil
+        #endif
+    }
+
+    #if DEBUG
     private static func fixtureResponse() -> TrackingResponse {
         .init(
             currentMonth: "2026-05",
@@ -235,6 +617,7 @@ private final class TrackingFeatureViewModel: ObservableObject {
             ]
         )
     }
+    #endif
 }
 
 private struct TrackingFeatureView: View {
@@ -420,6 +803,8 @@ private struct FeatureRootView: View {
                 RecurringsFeatureView(api: api)
             } else if tab == .tracking {
                 TrackingFeatureView(api: api)
+            } else if tab == .notepad {
+                NotepadFeatureView(api: api)
             } else {
                 List {
             Section {
