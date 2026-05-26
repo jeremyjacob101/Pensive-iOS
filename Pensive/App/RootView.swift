@@ -1,56 +1,115 @@
 import SwiftUI
 
 struct RootView: View {
-    @ObservedObject var container: SessionStoreBridge
-    let appEnvironment: AppEnvironment
+    @StateObject private var authViewModel: AuthViewModel
 
     init(container: AppContainer) {
-        self.container = SessionStoreBridge(store: container.sessionStore)
-        self.appEnvironment = container.environment
+        _authViewModel = StateObject(wrappedValue: AuthViewModel(sessionStore: container.sessionStore))
     }
 
     var body: some View {
-        VStack {
-            switch container.status {
-            case .checking:
+        Group {
+            switch authViewModel.state {
+            case .launching, .loadingSession:
                 ProgressView("Checking session…")
-            case .signedOut:
+                    .accessibilityIdentifier("auth_loading")
+
+            case .unauthenticated, .authenticating:
+                LoginView(viewModel: authViewModel)
+                    .accessibilityIdentifier("login_view")
+
+            case .authenticated(let session):
+                AuthenticatedHomeView(userId: session.userId, signOut: authViewModel.signOut)
+                    .accessibilityIdentifier("home_view")
+
+            case .authError(let error):
                 VStack(spacing: 12) {
-                    Text("Pensive")
-                        .font(.title)
-                    Text("Please sign in to continue")
+                    Text("We couldn't verify your session")
+                        .font(.headline)
+                    Text(error.userMessage)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Try Again") {
+                        authViewModel.retrySessionCheck()
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 .padding()
-            case .signedIn:
-                Text("Pensive Home")
-                    .font(.title2)
+                .accessibilityIdentifier("auth_error_view")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("root_view")
         .task {
-            container.bootstrapSession()
+            authViewModel.bootstrapSessionIfNeeded()
         }
     }
 }
 
-final class SessionStoreBridge: ObservableObject {
-    @Published private(set) var status: AuthStatus
-    private let store: SessionStore
+private struct LoginView: View {
+    @ObservedObject var viewModel: AuthViewModel
 
-    init(store: SessionStore) {
-        self.store = store
-        self.status = store.status
-        store.onStatusChange = { [weak self] next in
-            DispatchQueue.main.async {
-                self?.status = next
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Pensive")
+                .font(.largeTitle.weight(.semibold))
+
+            Text("Sign in to continue")
+                .foregroundStyle(.secondary)
+
+            TextField("Email", text: $viewModel.email)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.emailAddress)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("email_field")
+
+            SecureField("Password", text: $viewModel.password)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("password_field")
+
+            if let inlineError = viewModel.inlineError, !inlineError.isEmpty {
+                Text(inlineError)
+                    .foregroundStyle(.red)
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("auth_inline_error")
             }
-        }
-    }
 
-    func bootstrapSession() {
-        store.bootstrapSession()
+            Button {
+                viewModel.signIn()
+            } label: {
+                if viewModel.isLoading {
+                    ProgressView()
+                } else {
+                    Text("Sign In")
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.isLoading)
+            .accessibilityIdentifier("sign_in_button")
+        }
+        .padding()
+    }
+}
+
+private struct AuthenticatedHomeView: View {
+    let userId: String
+    let signOut: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Pensive Home")
+                .font(.title2)
+            Text("Signed in as \(userId)")
+                .foregroundStyle(.secondary)
+                .font(.footnote)
+            Button("Sign Out", action: signOut)
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("sign_out_button")
+        }
+        .padding()
     }
 }

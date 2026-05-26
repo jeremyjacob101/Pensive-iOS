@@ -63,7 +63,21 @@ xcodebuild -scheme Pensive \
   -only-testing:PensiveUITests/PensiveUITests/testLaunchShowsRootView test
 ```
 
-## 5) If Simulator Fails To Launch App (Preflight Busy)
+## 5) Codex Sandbox + Escalation Rule (Mandatory)
+
+When running from Codex, simulator/Xcode operations can fail under sandbox constraints even when commands are correct.
+
+Common symptom signatures:
+- `CoreSimulatorService connection became invalid`
+- `Unable to deliver request ... not connected to CoreSimulatorService`
+- `DVTFilePathFSEvents` or simulator logging permission errors
+
+Action:
+- Immediately rerun the same `xcodebuild`/`simctl` command with escalated permissions in Codex.
+- Do not change command flags first; preserve the canonical command from this document.
+- Keep using `/private/tmp/PensiveDerivedData` and sequential test execution.
+
+## 6) If Simulator Fails To Launch App (Preflight Busy)
 
 Symptom usually includes:
 - `SBMainWorkspace ... Busy (Application failed preflight checks)`
@@ -77,7 +91,7 @@ xcrun simctl boot 'iPhone 17'
 
 Then rerun the same test command with the stable flags above.
 
-## 6) SweetPad Setup
+## 7) SweetPad Setup
 
 This repo keeps SweetPad config in:
 - `.vscode/settings.json`
@@ -85,9 +99,10 @@ This repo keeps SweetPad config in:
 
 Use the provided tasks directly for build/test runs to avoid drift.
 
-## 7) Non-Negotiables
+## 8) Non-Negotiables
 
 - Run unit and UI commands sequentially, not in parallel.
 - Keep `iPhone 17` destination unless SWIFT.md explicitly changes it.
 - Keep `/private/tmp/PensiveDerivedData` unless permissions model changes.
 - If adding/removing files, rerun `xcodegen generate` before tests.
+- If simulator tooling fails due to sandbox constraints, rerun with Codex escalation using the same command.
