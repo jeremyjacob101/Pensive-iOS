@@ -83,4 +83,38 @@ final class LedgerBreakdownComputingTests: XCTestCase {
             subIncomingId: nil
         )
     }
+
+    func testTrackingMonthRangeIsInclusiveAndOrdered() {
+        let months = TrackingTimelineLogic.monthRange(start: "2026-01", end: "2026-04")
+        XCTAssertEqual(months, ["2026-01", "2026-02", "2026-03", "2026-04"])
+    }
+
+    func testTrackingSegmentsApplyPaidBufferUnpaidAndEmptyStates() {
+        let months = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07"]
+        let segments = TrackingTimelineLogic.segments(
+            months: months,
+            paidMonths: ["2026-03", "2026-05"],
+            currentMonth: "2026-05",
+            trailingBufferMonths: 1
+        )
+
+        XCTAssertEqual(segments[0].state, .paid)
+        XCTAssertEqual(segments[1].state, .unpaid)
+        XCTAssertEqual(segments[2].state, .paid)
+        XCTAssertEqual(segments[3].state, .buffer)
+        XCTAssertEqual(segments[4].state, .empty)
+    }
+
+    func testTrackingPersistenceStoreRoundTripsPerRowValues() {
+        let suiteName = "tracking.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = TrackingTimelineRowPersistenceStore(defaults: defaults)
+        store.setStartMonth("2026-02", source: "expense", key: "housing")
+        store.setTrailingBufferMonths(3, source: "expense", key: "housing")
+
+        XCTAssertEqual(store.startMonth(source: "expense", key: "housing"), "2026-02")
+        XCTAssertEqual(store.trailingBufferMonths(source: "expense", key: "housing"), 3)
+    }
 }

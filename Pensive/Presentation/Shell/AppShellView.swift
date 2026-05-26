@@ -1,5 +1,346 @@
 import SwiftUI
 
+enum TrackingTimelineSegmentState: String {
+    case paid
+    case unpaid
+    case buffer
+    case empty
+}
+
+struct TrackingTimelineSegment: Identifiable {
+    let id: String
+    let month: String
+    let state: TrackingTimelineSegmentState
+}
+
+private struct TrackingTimelineRowViewData: Identifiable {
+    let id: String
+    let key: String
+    let source: String
+    let label: String
+    let colorHex: String
+    let paidMonths: Set<String>
+    let currentMonth: String
+    let availableMonths: [String]
+    var startMonth: String
+    var trailingBufferMonths: Int
+    var segments: [TrackingTimelineSegment]
+}
+
+enum TrackingTimelineLogic {
+    static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar
+    }()
+
+    static func monthDate(_ month: String) -> Date? {
+        let comps = month.split(separator: "-")
+        guard comps.count == 2, let y = Int(comps[0]), let m = Int(comps[1]), (1 ... 12).contains(m) else { return nil }
+        return calendar.date(from: DateComponents(year: y, month: m, day: 1))
+    }
+
+    static func monthString(_ date: Date) -> String {
+        let comps = calendar.dateComponents([.year, .month], from: date)
+        let y = comps.year ?? 1970
+        let m = comps.month ?? 1
+        return String(format: "%04d-%02d", y, m)
+    }
+
+    static func monthRange(start: String, end: String) -> [String] {
+        guard let startDate = monthDate(start), let endDate = monthDate(end), startDate <= endDate else { return [] }
+        var result: [String] = []
+        var cursor = startDate
+        while cursor <= endDate {
+            result.append(monthString(cursor))
+            cursor = calendar.date(byAdding: .month, value: 1, to: cursor) ?? cursor
+            if result.count > 2400 { break }
+        }
+        return result
+    }
+
+    static func segments(months: [String], paidMonths: Set<String>, currentMonth: String, trailingBufferMonths: Int) -> [TrackingTimelineSegment] {
+        guard let current = monthDate(currentMonth) else {
+            return months.map { .init(id: $0, month: $0, state: paidMonths.contains($0) ? .paid : .unpaid) }
+        }
+
+        return months.map { month in
+            let state: TrackingTimelineSegmentState
+            if paidMonths.contains(month) {
+                state = .paid
+            } else if let monthDate = monthDate(month) {
+                let delta = calendar.dateComponents([.month], from: current, to: monthDate).month ?? 0
+                if delta > 0 && delta <= trailingBufferMonths {
+                    state = .buffer
+                } else if delta > trailingBufferMonths {
+                    state = .empty
+                } else {
+                    state = .unpaid
+                }
+            } else {
+                state = .empty
+            }
+            return .init(id: month, month: month, state: state)
+        }
+    }
+}
+
+struct TrackingTimelineRowPersistenceStore {
+    private let defaults: UserDefaults
+    private let startPrefix = "tracking.timeline.start"
+    private let bufferPrefix = "tracking.timeline.buffer"
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func startMonth(source: String, key: String) -> String? {
+        defaults.string(forKey: "\(startPrefix).\(source).\(key)")
+    }
+
+    func trailingBufferMonths(source: String, key: String) -> Int? {
+        let value = defaults.object(forKey: "\(bufferPrefix).\(source).\(key)") as? Int
+        return value
+    }
+
+    func setStartMonth(_ value: String, source: String, key: String) {
+        defaults.set(value, forKey: "\(startPrefix).\(source).\(key)")
+    }
+
+    func setTrailingBufferMonths(_ value: Int, source: String, key: String) {
+        defaults.set(max(0, value), forKey: "\(bufferPrefix).\(source).\(key)")
+    }
+}
+
+@MainActor
+private final class TrackingFeatureViewModel: ObservableObject {
+    @Published private(set) var state: ViewLoadState = .loading
+    @Published private(set) var expenseRows: [TrackingTimelineRowViewData] = []
+    @Published private(set) var incomingRows: [TrackingTimelineRowViewData] = []
+
+    private let api: ConvexAPI
+    private let persistence: TrackingTimelineRowPersistenceStore
+
+    init(api: ConvexAPI, persistence: TrackingTimelineRowPersistenceStore = .init()) {
+        self.api = api
+        self.persistence = persistence
+    }
+
+    func onAppear() {
+        if expenseRows.isEmpty && incomingRows.isEmpty {
+            Task { await refresh() }
+        }
+    }
+
+    func refresh() async {
+        state = .loading
+        do {
+            let tracking = try await api.tracking.list()
+            apply(response: tracking)
+            state = .content
+        } catch {
+            if ProcessInfo.processInfo.environment["UI_TEST_TRACKING_FIXTURE"] == "1" {
+                apply(response: Self.fixtureResponse())
+                state = .content
+            } else {
+                state = .error(message: "Failed to load tracking")
+            }
+        }
+    }
+
+    func setStartMonth(rowID: String, source: String, key: String, month: String) {
+        persistence.setStartMonth(month, source: source, key: key)
+        mutateRow(id: rowID, source: source) { row in
+            row.startMonth = month
+            row.segments = TrackingTimelineLogic.segments(
+                months: row.availableMonths,
+                paidMonths: row.paidMonths,
+                currentMonth: row.currentMonth,
+                trailingBufferMonths: row.trailingBufferMonths
+            )
+        }
+    }
+
+    func setTrailingBufferMonths(rowID: String, source: String, key: String, months: Int) {
+        persistence.setTrailingBufferMonths(months, source: source, key: key)
+        mutateRow(id: rowID, source: source) { row in
+            row.trailingBufferMonths = max(0, months)
+            row.segments = TrackingTimelineLogic.segments(
+                months: row.availableMonths,
+                paidMonths: row.paidMonths,
+                currentMonth: row.currentMonth,
+                trailingBufferMonths: row.trailingBufferMonths
+            )
+        }
+    }
+
+    private func apply(response: TrackingResponse) {
+        let rows = response.rows.map { dto -> TrackingTimelineRowViewData in
+            let source = dto.source.lowercased()
+            let persistedStart = persistence.startMonth(source: source, key: dto.key)
+            let fallbackStart = dto.rangeMonths.first ?? response.currentMonth
+            let start = persistedStart.flatMap { s in dto.rangeMonths.contains(s) ? s : nil } ?? fallbackStart
+            let persistedBuffer = persistence.trailingBufferMonths(source: source, key: dto.key) ?? 0
+            let months = dto.rangeMonths.isEmpty ? [response.currentMonth] : dto.rangeMonths
+            let allMonths = months.last == response.currentMonth ? months : months + [response.currentMonth]
+            let clipped = allMonths.filter { month in
+                guard let monthDate = TrackingTimelineLogic.monthDate(month), let startDate = TrackingTimelineLogic.monthDate(start) else { return false }
+                return monthDate >= startDate
+            }
+            let segments = TrackingTimelineLogic.segments(
+                months: clipped,
+                paidMonths: Set(dto.paidMonths),
+                currentMonth: response.currentMonth,
+                trailingBufferMonths: persistedBuffer
+            )
+            return .init(
+                id: "\(source):\(dto.key)",
+                key: dto.key,
+                source: source,
+                label: dto.label,
+                colorHex: dto.color,
+                paidMonths: Set(dto.paidMonths),
+                currentMonth: response.currentMonth,
+                availableMonths: clipped,
+                startMonth: start,
+                trailingBufferMonths: persistedBuffer,
+                segments: segments
+            )
+        }
+
+        expenseRows = rows.filter { $0.source == "expense" }
+        incomingRows = rows.filter { $0.source == "incoming" }
+    }
+
+    private func mutateRow(id: String, source: String, _ mutate: (inout TrackingTimelineRowViewData) -> Void) {
+        if source == "expense" {
+            guard let index = expenseRows.firstIndex(where: { $0.id == id }) else { return }
+            var row = expenseRows[index]
+            mutate(&row)
+            expenseRows[index] = row
+        } else {
+            guard let index = incomingRows.firstIndex(where: { $0.id == id }) else { return }
+            var row = incomingRows[index]
+            mutate(&row)
+            incomingRows[index] = row
+        }
+    }
+
+    private static func fixtureResponse() -> TrackingResponse {
+        .init(
+            currentMonth: "2026-05",
+            rows: [
+                .init(key: "housing", source: "expense", kind: "category", value: "housing", parentValue: nil, color: "#FF5A5F", label: "Housing", paidMonths: ["2026-01", "2026-02", "2026-04"], rangeMonths: ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"], statusByMonth: [:]),
+                .init(key: "salary", source: "incoming", kind: "type", value: "salary", parentValue: nil, color: "#00A699", label: "Salary", paidMonths: ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05"], rangeMonths: ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"], statusByMonth: [:])
+            ]
+        )
+    }
+}
+
+private struct TrackingFeatureView: View {
+    @StateObject private var viewModel: TrackingFeatureViewModel
+
+    init(api: ConvexAPI) {
+        _viewModel = StateObject(wrappedValue: TrackingFeatureViewModel(api: api))
+    }
+
+    var body: some View {
+        LoadStateView(state: viewModel.state, retry: { Task { await viewModel.refresh() } }) {
+            List {
+                if !viewModel.expenseRows.isEmpty {
+                    Section("Expenses") {
+                        ForEach(viewModel.expenseRows) { row in
+                            TrackingTimelineRowCard(row: row, onStartMonth: { month in
+                                viewModel.setStartMonth(rowID: row.id, source: row.source, key: row.key, month: month)
+                            }, onBuffer: { buffer in
+                                viewModel.setTrailingBufferMonths(rowID: row.id, source: row.source, key: row.key, months: buffer)
+                            })
+                        }
+                    }
+                }
+                if !viewModel.incomingRows.isEmpty {
+                    Section("Incomings") {
+                        ForEach(viewModel.incomingRows) { row in
+                            TrackingTimelineRowCard(row: row, onStartMonth: { month in
+                                viewModel.setStartMonth(rowID: row.id, source: row.source, key: row.key, month: month)
+                            }, onBuffer: { buffer in
+                                viewModel.setTrailingBufferMonths(rowID: row.id, source: row.source, key: row.key, months: buffer)
+                            })
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Tracking")
+            .refreshable { await viewModel.refresh() }
+        }
+        .task { viewModel.onAppear() }
+    }
+}
+
+private struct TrackingTimelineRowCard: View {
+    let row: TrackingTimelineRowViewData
+    let onStartMonth: (String) -> Void
+    let onBuffer: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(row.label)
+                .font(.headline)
+                .accessibilityIdentifier("tracking_row_title_\(row.key)")
+
+            Picker("Start Month", selection: Binding(get: { row.startMonth }, set: { onStartMonth($0) })) {
+                ForEach(row.availableMonths, id: \.self) { month in
+                    Text(month).tag(month)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("tracking_start_month_\(row.key)")
+
+            Stepper(value: Binding(get: { row.trailingBufferMonths }, set: { onBuffer($0) }), in: 0 ... 24) {
+                Text("Buffer Months: \(row.trailingBufferMonths)")
+            }
+            .accessibilityIdentifier("tracking_buffer_\(row.key)")
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(row.segments) { segment in
+                            VStack(spacing: 4) {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(color(for: segment.state))
+                                    .frame(width: 42, height: 18)
+                                Text(segment.month.suffix(2))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .id(segment.id)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(segment.month), \(segment.state.rawValue)")
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .onAppear {
+                    if let newest = row.segments.last?.id {
+                        proxy.scrollTo(newest, anchor: .trailing)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func color(for state: TrackingTimelineSegmentState) -> Color {
+        switch state {
+        case .paid: return .green
+        case .unpaid: return .orange
+        case .buffer: return .blue
+        case .empty: return Color(uiColor: .systemGray4)
+        }
+    }
+}
+
 @MainActor
 final class QuickAddFormViewModel: ObservableObject {
     @Published var kind: QuickAddKind = .expense
@@ -77,6 +418,8 @@ private struct FeatureRootView: View {
                 BreakdownFeatureView(api: api)
             } else if tab == .recurrings {
                 RecurringsFeatureView(api: api)
+            } else if tab == .tracking {
+                TrackingFeatureView(api: api)
             } else {
                 List {
             Section {
