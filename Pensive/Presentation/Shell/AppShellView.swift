@@ -105,6 +105,23 @@ private final class NotepadFeatureViewModel: ObservableObject {
         }
     }
 
+    func createNote(title: String, content: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, !trimmedContent.isEmpty else { return }
+
+        let noteID = "note-\(UUID().uuidString.lowercased())"
+        Task {
+            do {
+                try await api.notepad.addNote(.init(noteId: noteID, title: trimmedTitle))
+                try await api.notepad.saveNoteContent(.init(noteId: noteID, content: trimmedContent))
+                await refresh()
+            } catch {
+                saveErrorText = "Failed to create note."
+            }
+        }
+    }
+
     func addTable() {
         Task {
             do {
@@ -265,6 +282,11 @@ private struct NotepadFeatureView: View {
 
     @StateObject private var viewModel: NotepadFeatureViewModel
     @State private var panel: Panel = .notes
+    @State private var showingNewNoteSheet = false
+    @State private var newNoteTitle = ""
+    @State private var newNoteContent = ""
+    @State private var editingNoteID: String?
+    @State private var editingTableID: String?
 
     init(api: ConvexAPI) {
         _viewModel = StateObject(wrappedValue: NotepadFeatureViewModel(api: api))
@@ -272,103 +294,420 @@ private struct NotepadFeatureView: View {
 
     var body: some View {
         LoadStateView(state: viewModel.state, retry: { Task { await viewModel.refresh() } }) {
-            List {
-                Section {
-                    Picker("Panel", selection: $panel) {
-                        ForEach(Panel.allCases, id: \.self) { p in
-                            Text(p.rawValue).tag(p)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+            NotepadWorkspaceListView(
+                panel: $panel,
+                saveErrorText: viewModel.saveErrorText,
+                notes: viewModel.notes,
+                tables: viewModel.tables,
+                onNoteTap: { editingNoteID = $0.id },
+                onTableTap: { editingTableID = $0.id }
+            )
+            .listStyle(.insetGrouped)
+            .navigationTitle("Notepad")
+            .toolbar {
+                addToolbar
+            }
+            .refreshable { await viewModel.refresh() }
+            .sheet(isPresented: $showingNewNoteSheet) {
+                newNoteSheet
+            }
+            .sheet(item: editingNoteBinding) { editorID in
+                noteEditorSheet(editorID)
+            }
+            .sheet(item: editingTableBinding) { editorID in
+                tableEditorSheet(editorID)
+            }
+        }
+        .task { viewModel.onAppear() }
+    }
+
+    @ToolbarContentBuilder
+    private var addToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Button("New Note") {
+                    newNoteTitle = ""
+                    newNoteContent = ""
+                    showingNewNoteSheet = true
                 }
+                .accessibilityIdentifier("notepad_add_note")
+                Button("New Table") { viewModel.addTable() }
+                    .accessibilityIdentifier("notepad_add_table")
+            } label: {
+                Image(systemName: "plus")
+            }
+        }
+    }
 
-                if let saveError = viewModel.saveErrorText {
-                    Section {
-                        Text(saveError)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
+    private var editingNoteBinding: Binding<NotepadEditorID?> {
+        Binding(
+            get: {
+                guard let id = editingNoteID else { return nil }
+                return NotepadEditorID(rawValue: id)
+            },
+            set: { editingNoteID = $0?.rawValue }
+        )
+    }
+
+    private var editingTableBinding: Binding<NotepadEditorID?> {
+        Binding(
+            get: {
+                guard let id = editingTableID else { return nil }
+                return NotepadEditorID(rawValue: id)
+            },
+            set: { editingTableID = $0?.rawValue }
+        )
+    }
+
+    private var canSaveNewNote: Bool {
+        !newNoteTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !newNoteContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var newNoteSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Title") {
+                    TextField("Note title", text: $newNoteTitle)
+                }
+                Section("Content") {
+                    TextEditor(text: $newNoteContent)
+                        .frame(minHeight: 200)
+                }
+            }
+            .navigationTitle("New Note")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingNewNoteSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        viewModel.createNote(title: newNoteTitle, content: newNoteContent)
+                        showingNewNoteSheet = false
+                    }
+                    .disabled(!canSaveNewNote)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func noteEditorSheet(_ editorID: NotepadEditorID) -> some View {
+        if let note = viewModel.notes.first(where: { $0.id == editorID.rawValue }) {
+            NavigationStack {
+                Form {
+                    Section("Title") {
+                        TextField("Title", text: Binding(
+                            get: { note.title },
+                            set: { viewModel.renameNote(id: note.id, title: $0) }
+                        ))
+                        .accessibilityIdentifier("notepad_note_title_\(note.id)")
+                    }
+                    Section("Content") {
+                        TextEditor(text: Binding(
+                            get: { note.content },
+                            set: { viewModel.saveNoteContent(id: note.id, content: $0) }
+                        ))
+                        .frame(minHeight: 260)
+                        .accessibilityIdentifier("notepad_note_content_\(note.id)")
                     }
                 }
-
-                if panel == .notes {
-                    Section {
-                        Button("Add Note") { viewModel.addNote() }
-                            .accessibilityIdentifier("notepad_add_note")
-                        Button("Cleanup Empty Notes") { viewModel.cleanupEmptyNotes() }
-                            .accessibilityIdentifier("notepad_cleanup_notes")
-                    }
-
-                    ForEach(viewModel.notes) { note in
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextField("Title", text: Binding(
-                                get: { note.title },
-                                set: { viewModel.renameNote(id: note.id, title: $0) }
-                            ))
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("notepad_note_title_\(note.id)")
-
-                            TextEditor(text: Binding(
-                                get: { note.content },
-                                set: { viewModel.saveNoteContent(id: note.id, content: $0) }
-                            ))
-                            .frame(minHeight: 120)
-                            .accessibilityIdentifier("notepad_note_content_\(note.id)")
-                        }
-                        .padding(.vertical, 4)
-                    }
-                } else {
-                    Section {
-                        Button("Add Table") { viewModel.addTable() }
-                            .accessibilityIdentifier("notepad_add_table")
-                    }
-
-                    ForEach(viewModel.tables) { table in
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextField("Table Title", text: Binding(
-                                get: { table.title },
-                                set: { viewModel.renameTable(id: table.id, title: $0) }
-                            ))
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("notepad_table_title_\(table.id)")
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(Array(table.cells.enumerated()), id: \.offset) { rowIndex, row in
-                                        HStack(spacing: 6) {
-                                            ForEach(Array(row.enumerated()), id: \.offset) { colIndex, cell in
-                                                TextField("Cell", text: Binding(
-                                                    get: { cell },
-                                                    set: { viewModel.editCell(tableID: table.id, row: rowIndex, col: colIndex, value: $0) }
-                                                ))
-                                                .textFieldStyle(.roundedBorder)
-                                                .frame(width: 130)
-                                                .accessibilityIdentifier("notepad_cell_\(table.id)_\(rowIndex)_\(colIndex)")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            HStack {
-                                Button("Row +") { viewModel.addRow(tableID: table.id) }
-                                Button("Row -") { viewModel.removeLastRow(tableID: table.id) }
-                                Button("Col +") { viewModel.addColumn(tableID: table.id) }
-                                Button("Col -") { viewModel.removeLastColumn(tableID: table.id) }
-                                Spacer()
-                                Button("Delete", role: .destructive) { viewModel.deleteTable(id: table.id) }
-                            }
-                            .buttonStyle(.bordered)
-                            .accessibilityIdentifier("notepad_table_actions_\(table.id)")
-                        }
-                        .padding(.vertical, 4)
+                .navigationTitle("Edit Note")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { editingNoteID = nil }
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Notepad")
-            .refreshable { await viewModel.refresh() }
         }
-        .task { viewModel.onAppear() }
+    }
+
+    @ViewBuilder
+    private func tableEditorSheet(_ editorID: NotepadEditorID) -> some View {
+        if let table = viewModel.tables.first(where: { $0.id == editorID.rawValue }) {
+            NavigationStack {
+                List {
+                    Section {
+                        TextField("Table Title", text: Binding(
+                            get: { table.title },
+                            set: { viewModel.renameTable(id: table.id, title: $0) }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("notepad_table_title_\(table.id)")
+                    }
+                    Section {
+                        NotepadEditableTableGrid(
+                            table: table,
+                            onEditCell: { row, col, value in
+                                viewModel.editCell(tableID: table.id, row: row, col: col, value: value)
+                            },
+                            onAddRow: { viewModel.addRow(tableID: table.id) },
+                            onRemoveRow: { viewModel.removeLastRow(tableID: table.id) },
+                            onAddColumn: { viewModel.addColumn(tableID: table.id) },
+                            onRemoveColumn: { viewModel.removeLastColumn(tableID: table.id) }
+                        )
+                        .accessibilityIdentifier("notepad_table_actions_\(table.id)")
+                    }
+                    Section {
+                        Button("Delete Table", role: .destructive) {
+                            viewModel.deleteTable(id: table.id)
+                            editingTableID = nil
+                        }
+                    }
+                }
+                .navigationTitle("Edit Table")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { editingTableID = nil }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct NotepadEditorID: Identifiable {
+    let rawValue: String
+    var id: String { rawValue }
+}
+
+private struct NotepadEditableTableGrid: View {
+    let table: NotepadTableViewData
+    let onEditCell: (Int, Int, String) -> Void
+    let onAddRow: () -> Void
+    let onRemoveRow: () -> Void
+    let onAddColumn: () -> Void
+    let onRemoveColumn: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(table.cells.enumerated()), id: \.offset) { rowIndex, row in
+                            NotepadEditableTableRow(
+                                tableID: table.id,
+                                rowIndex: rowIndex,
+                                row: row,
+                                onEditCell: onEditCell
+                            )
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        tableControlButton(systemName: "minus", action: onRemoveRow)
+                        tableControlButton(systemName: "plus", action: onAddRow)
+                    }
+                }
+            }
+
+            VStack(spacing: 8) {
+                tableControlButton(systemName: "plus", action: onAddColumn)
+                tableControlButton(systemName: "minus", action: onRemoveColumn)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func tableControlButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.caption.weight(.semibold))
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.bordered)
+    }
+}
+
+private struct NotepadEditableTableRow: View {
+    let tableID: String
+    let rowIndex: Int
+    let row: [String]
+    let onEditCell: (Int, Int, String) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(row.enumerated()), id: \.offset) { colIndex, cell in
+                TextField("Cell", text: Binding(
+                    get: { cell },
+                    set: { onEditCell(rowIndex, colIndex, $0) }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 130)
+                .accessibilityIdentifier("notepad_cell_\(tableID)_\(rowIndex)_\(colIndex)")
+            }
+        }
+    }
+}
+
+private struct NotepadWorkspaceListView: View {
+    @Binding var panel: NotepadFeatureView.Panel
+    let saveErrorText: String?
+    let notes: [NotepadNoteViewData]
+    let tables: [NotepadTableViewData]
+    let onNoteTap: (NotepadNoteViewData) -> Void
+    let onTableTap: (NotepadTableViewData) -> Void
+
+    var body: some View {
+        List {
+            NotepadPanelPickerSection(panel: $panel)
+            NotepadSaveErrorSection(message: saveErrorText)
+            NotepadPanelRowsView(
+                panel: panel,
+                notes: notes,
+                tables: tables,
+                onNoteTap: onNoteTap,
+                onTableTap: onTableTap
+            )
+        }
+    }
+}
+
+private struct NotepadPanelPickerSection: View {
+    @Binding var panel: NotepadFeatureView.Panel
+
+    var body: some View {
+        Section {
+            Picker("Panel", selection: $panel) {
+                Text(NotepadFeatureView.Panel.notes.rawValue).tag(NotepadFeatureView.Panel.notes)
+                Text(NotepadFeatureView.Panel.tables.rawValue).tag(NotepadFeatureView.Panel.tables)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+}
+
+private struct NotepadSaveErrorSection: View {
+    let message: String?
+
+    var body: some View {
+        if let message {
+            Section {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+}
+
+private struct NotepadPanelRowsView: View {
+    let panel: NotepadFeatureView.Panel
+    let notes: [NotepadNoteViewData]
+    let tables: [NotepadTableViewData]
+    let onNoteTap: (NotepadNoteViewData) -> Void
+    let onTableTap: (NotepadTableViewData) -> Void
+
+    var body: some View {
+        switch panel {
+        case .notes:
+            NotepadNotesListView(notes: notes, onTap: onNoteTap)
+        case .tables:
+            NotepadTablesListView(tables: tables, onTap: onTableTap)
+        }
+    }
+}
+
+private struct NotepadNotesListView: View {
+    let notes: [NotepadNoteViewData]
+    let onTap: (NotepadNoteViewData) -> Void
+
+    var body: some View {
+        ForEach(notes, id: \.id) { note in
+            Button {
+                onTap(note)
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(note.title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(note.content)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+private struct NotepadTablesListView: View {
+    let tables: [NotepadTableViewData]
+    let onTap: (NotepadTableViewData) -> Void
+
+    var body: some View {
+        ForEach(tables, id: \.id) { table in
+            Button {
+                onTap(table)
+            } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(table.title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    NotepadTablePreview(cells: table.cells)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+private struct NotepadTablePreview: View {
+    let cells: [[String]]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(cells.enumerated()), id: \.offset) { _, row in
+                    NotepadTablePreviewRow(cells: row)
+                }
+            }
+        }
+    }
+}
+
+private struct NotepadTablePreviewRow: View {
+    let cells: [String]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                NotepadTablePreviewCell(text: cell)
+            }
+        }
+    }
+}
+
+private struct NotepadTablePreviewCell: View {
+    let text: String
+
+    var body: some View {
+        Text(text.isEmpty ? " " : text)
+            .font(.caption)
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .frame(width: 120, height: 32, alignment: .leading)
+            .padding(.horizontal, 8)
+            .overlay(
+                Rectangle()
+                    .stroke(.secondary.opacity(0.35), lineWidth: 0.5)
+            )
     }
 }
 
