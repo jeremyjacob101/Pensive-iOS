@@ -779,16 +779,24 @@ enum TrackingTimelineLogic {
             return months.map { .init(id: $0, month: $0, state: paidMonths.contains($0) ? .paid : .unpaid) }
         }
 
+        let recentUnpaidBufferMonths: Set<String> = {
+            let eligible = months.compactMap { month -> (String, Date)? in
+                guard !paidMonths.contains(month), let date = monthDate(month), date <= current else { return nil }
+                return (month, date)
+            }
+            let sorted = eligible.sorted { $0.1 > $1.1 }
+            return Set(sorted.prefix(max(0, trailingBufferMonths)).map(\.0))
+        }()
+
         return months.map { month in
             let state: TrackingTimelineSegmentState
             if paidMonths.contains(month) {
                 state = .paid
             } else if let monthDate = monthDate(month) {
-                let delta = calendar.dateComponents([.month], from: current, to: monthDate).month ?? 0
-                if delta > 0 && delta <= trailingBufferMonths {
-                    state = .buffer
-                } else if delta > trailingBufferMonths {
+                if monthDate > current {
                     state = .empty
+                } else if recentUnpaidBufferMonths.contains(month) {
+                    state = .buffer
                 } else {
                     state = .unpaid
                 }
@@ -1114,7 +1122,7 @@ private struct TrackingPipelinePreview: View {
                     }
                 }
             }
-            .frame(width: 230, alignment: .trailing)
+            .frame(width: 276, alignment: .trailing)
             .onAppear {
                 if let newest = segments.last?.id {
                     proxy.scrollTo(newest, anchor: .trailing)
@@ -1134,7 +1142,7 @@ private struct TrackingPipelinePreview: View {
         switch state {
         case .paid: return .green
         case .unpaid: return .orange
-        case .buffer: return .blue
+        case .buffer: return Color(uiColor: .systemGray3)
         case .empty: return Color(uiColor: .systemGray4)
         }
     }
