@@ -94,6 +94,7 @@ protocol ConvexAPI {
 protocol AuthAPI {
     func signIn(_ request: SignInRequest) async throws -> SessionResponse
     func signUp(_ request: SignInRequest) async throws -> SessionResponse
+    func refresh(refreshToken: String) async throws -> SessionResponse
     func signOut() async throws
     func session() async throws -> SessionResponse
 }
@@ -500,6 +501,7 @@ private final class AuthClient: AuthAPI {
 
     func signIn(_ request: SignInRequest) async throws -> SessionResponse { try await client.send(Req.mutation("api/auth/sign-in"), body: request) }
     func signUp(_ request: SignInRequest) async throws -> SessionResponse { try await client.send(Req.mutation("api/auth/sign-up"), body: request) }
+    func refresh(refreshToken: String) async throws -> SessionResponse { try await client.send(Req.mutation("api/auth/refresh"), body: ["refreshToken": refreshToken]) }
     func signOut() async throws { let _: EmptyResponse = try await client.send(Req.mutation("api/auth/sign-out"), body: EmptyBody()) }
     func session() async throws -> SessionResponse { try await client.send(Req.get("api/auth/session"), body: Optional<EmptyBody>.none) }
 }

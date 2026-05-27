@@ -44,11 +44,15 @@ final class SessionStore: SessionStoring {
                 defer { self.stateQueue.sync { self.bootstrapTask = nil } }
 
                 do {
-                    let response = try await self.authAPI.session()
+                    var response = try await self.authAPI.session()
+                    if !response.authenticated,
+                       let refreshToken = self.tokenStore.currentRefreshToken,
+                       !refreshToken.isEmpty {
+                        _ = try await self.authAPI.refresh(refreshToken: refreshToken)
+                        response = try await self.authAPI.session()
+                    }
                     if response.authenticated, let userId = response.userId, !userId.isEmpty {
-                        if let token = response.token {
-                            self.tokenStore.setToken(token)
-                        }
+                        self.persistTokens(from: response)
                         self.authMessage = nil
                         self.transition(to: .authenticated(UserSession(userId: userId, establishedAt: Date())))
                     } else {
@@ -120,7 +124,7 @@ final class SessionStore: SessionStoring {
                     }
 
                     self.authMessage = nil
-                    self.tokenStore.setToken(response.token)
+                    self.persistTokens(from: response)
                     self.transition(to: .authenticated(UserSession(userId: userId, establishedAt: Date())))
                 } catch {
                     let mapped = self.mapAuthError(error)
@@ -165,12 +169,25 @@ final class SessionStore: SessionStoring {
             do {
                 let session = try await self.authAPI.session()
                 if session.authenticated, let userId = session.userId, !userId.isEmpty {
+                    self.persistTokens(from: session)
                     self.authMessage = nil
                     self.transition(to: .authenticated(UserSession(userId: userId, establishedAt: Date())))
                     return
                 }
             } catch {
-                // Fall through to force sign-out.
+                if let refreshToken = self.tokenStore.currentRefreshToken, !refreshToken.isEmpty {
+                    do {
+                        let refreshed = try await self.authAPI.refresh(refreshToken: refreshToken)
+                        self.persistTokens(from: refreshed)
+                        let session = try await self.authAPI.session()
+                        if session.authenticated, let userId = session.userId, !userId.isEmpty {
+                            self.transition(to: .authenticated(UserSession(userId: userId, establishedAt: Date())))
+                            return
+                        }
+                    } catch {
+                        // Fall through to force sign-out.
+                    }
+                }
             }
 
             self.clearSessionArtifacts()
@@ -181,7 +198,14 @@ final class SessionStore: SessionStoring {
 
     private func clearSessionArtifacts() {
         cookieStorage.cookies?.forEach { cookieStorage.deleteCookie($0) }
-        tokenStore.setToken(nil)
+        tokenStore.setTokens(accessToken: nil, refreshToken: nil)
+    }
+
+    private func persistTokens(from response: SessionResponse) {
+        tokenStore.setTokens(
+            accessToken: response.token ?? tokenStore.currentToken,
+            refreshToken: response.refreshToken ?? tokenStore.currentRefreshToken
+        )
     }
 
     private func transition(to next: AuthState) {

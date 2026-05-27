@@ -113,6 +113,47 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/api/auth/refresh",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const body = (await request.json()) as { refreshToken?: string };
+    const refreshToken = (body.refreshToken ?? "").trim();
+
+    if (!refreshToken) {
+      return jsonError(422, "validation", "Missing refresh token.");
+    }
+
+    const result = (await ctx.runAction(api.auth.signIn, {
+      provider: "password",
+      params: {
+        flow: "refreshToken",
+        refreshToken,
+      },
+    })) as {
+      tokens?: { token?: string; refreshToken?: string } | null;
+    };
+
+    if (!result?.tokens?.token) {
+      return jsonError(401, "unauthorized", "Session expired.");
+    }
+
+    let identity = null;
+    try {
+      identity = await ctx.auth.getUserIdentity();
+    } catch {
+      identity = null;
+    }
+
+    return jsonOk({
+      authenticated: true,
+      token: result.tokens.token,
+      refreshToken: result.tokens.refreshToken ?? refreshToken,
+      userId: identity ? normalizeUsername(identity.subject) : null,
+    });
+  }),
+});
+
 // Expenses
 routeGet("/api/expenses/month-bounds", (ctx) => ctx.runQuery(api.expenses.monthBounds, {}));
 routePost("/api/expenses/list-by-date-scope", (ctx, body) => ctx.runQuery(api.expenses.listByDateScope, body));
